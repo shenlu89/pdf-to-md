@@ -23,6 +23,9 @@ export interface ConvertedPage {
   confidence: number;      // 0.0 - 1.0, model self-evaluation
   modelUsed: ModelId;
   tokensUsed?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  estimatedCost?: number; // Cost in USD
   retried?: boolean;
   serverDurationMs?: number; // Backend processing time for this page
 }
@@ -31,6 +34,7 @@ export interface ConvertedPage {
 export interface ConversionStats {
   totalPages: number;
   totalTokens: number;
+  totalEstimatedCost?: number; // Cost in USD
   modelsUsed: Record<ModelId, number>;
   retriedPages: number;
   durationMs: number;

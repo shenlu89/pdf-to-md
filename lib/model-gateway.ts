@@ -45,6 +45,26 @@ const MODEL_API_NAMES: Record<ModelId, string> = {
   "qwen-vl-max": "qwen-vl-max",
 };
 
+function calculateCost(modelId: ModelId, promptTokens: number, completionTokens: number): number {
+  let cost = 0;
+  switch (modelId) {
+    case "gemini-2.0-flash":
+      // Input: $0.10 / 1M, Output: $0.40 / 1M
+      cost = (promptTokens / 1_000_000) * 0.10 + (completionTokens / 1_000_000) * 0.40;
+      break;
+    case "gemini-2.5-pro":
+      // Assuming similar to 1.5 Pro: Input $1.25 / 1M, Output $5.00 / 1M
+      cost = (promptTokens / 1_000_000) * 1.25 + (completionTokens / 1_000_000) * 5.00;
+      break;
+    case "qwen-vl-max":
+      // Dashscope Qwen-VL-Max: Input 0.02 RMB/1k, Output 0.06 RMB/1k
+      // Assuming 1 USD = 7.2 RMB -> Input ~$2.78 / 1M, Output ~$8.33 / 1M
+      cost = (promptTokens / 1_000_000) * 2.78 + (completionTokens / 1_000_000) * 8.33;
+      break;
+  }
+  return cost;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function selectModel(chunk: PageChunk, forceModel?: ModelId): { modelId: ModelId; model: any } {
   if (forceModel) {
@@ -104,6 +124,11 @@ async function convertPage(
     normalizedConfidence = normalizedConfidence <= 10 ? normalizedConfidence / 10 : normalizedConfidence / 100;
   }
 
+  const usage = result.usage as any;
+  const promptTokens = usage.inputTokens || usage.promptTokens || 0;
+  const completionTokens = usage.outputTokens || usage.completionTokens || 0;
+  const estimatedCost = calculateCost(modelId, promptTokens, completionTokens);
+
   return {
     pageNumber: chunk.pageNumber,
     markdown: output.markdown,
@@ -113,6 +138,9 @@ async function convertPage(
     confidence: normalizedConfidence,
     modelUsed: modelId,
     tokensUsed: result.usage.totalTokens,
+    promptTokens,
+    completionTokens,
+    estimatedCost,
   };
 }
 
@@ -195,6 +223,11 @@ export async function convertPageWithRetry(
         normalizedConfidence = normalizedConfidence <= 10 ? normalizedConfidence / 10 : normalizedConfidence / 100;
       }
 
+      const retryUsage = retryResult.usage as any;
+      const retryPromptTokens = retryUsage.inputTokens || retryUsage.promptTokens || 0;
+      const retryCompletionTokens = retryUsage.outputTokens || retryUsage.completionTokens || 0;
+      const retryCost = calculateCost("gemini-2.5-pro", retryPromptTokens, retryCompletionTokens);
+
       result = {
         ...result,
         markdown: output.markdown,
@@ -204,6 +237,9 @@ export async function convertPageWithRetry(
         confidence: normalizedConfidence,
         modelUsed: "gemini-2.5-pro",
         tokensUsed: (result.tokensUsed || 0) + (retryResult.usage.totalTokens || 0),
+        promptTokens: (result.promptTokens || 0) + retryPromptTokens,
+        completionTokens: (result.completionTokens || 0) + retryCompletionTokens,
+        estimatedCost: (result.estimatedCost || 0) + retryCost,
         retried: true,
       };
     } catch (error) {

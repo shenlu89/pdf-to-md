@@ -203,12 +203,14 @@ export function computeStats(pages: ConvertedPage[], startTime: number): Convers
     let totalTokens = 0;
     let retriedPages = 0;
     let totalServerDurationMs = 0;
+    let totalEstimatedCost = 0;
 
     pages.forEach(p => {
         modelsUsed[p.modelUsed] = (modelsUsed[p.modelUsed] || 0) + 1;
         totalTokens += p.tokensUsed || 0;
         if (p.retried) retriedPages++;
         if (p.serverDurationMs) totalServerDurationMs += p.serverDurationMs;
+        if (p.estimatedCost) totalEstimatedCost += p.estimatedCost;
     });
 
     return {
@@ -218,5 +220,6 @@ export function computeStats(pages: ConvertedPage[], startTime: number): Convers
         retriedPages,
         durationMs: Date.now() - startTime,
         totalServerDurationMs,
+        totalEstimatedCost,
     };
 }
