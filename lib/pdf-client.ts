@@ -3,18 +3,8 @@ import { PageChunk } from "./types";
 let pdfjsLib: any = null;
 
 // Only initialize if we're in the browser
-if (typeof window !== "undefined") {
-  // Load pdfjs-dist dynamically to avoid SSR issues. Using minified build to avoid Webpack Object.defineProperty issues.
-  // @ts-ignore
-  import("pdfjs-dist/build/pdf.min.mjs").then((pdfjs) => {
-    pdfjsLib = pdfjs;
-    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-    }
-  }).catch(err => {
-    console.error("Failed to load pdfjs-dist:", err);
-  });
-}
+// We use lazy loading inside the function to avoid SSR issues and reduce initial bundle size.
+
 
 interface PDFMetadata {
   totalPages: number;
@@ -30,6 +20,7 @@ export async function extractPDFPagesFromClient(
 ): Promise<{ metadata: PDFMetadata; chunks: PageChunk[] }> {
   // Ensure pdfjsLib is loaded
   if (!pdfjsLib) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     pdfjsLib = await import("pdfjs-dist/build/pdf.min.mjs");
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
