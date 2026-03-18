@@ -4,8 +4,9 @@ import React, { useState, useRef } from "react";
 import DropZone from "@/components/DropZone";
 import ConversionProgress from "@/components/ConversionProgress";
 import MarkdownPreview from "@/components/MarkdownPreview";
-import { ConvertedPage, ConversionStats, StreamEvent } from "@/lib/types";
+import { ConvertedPage, ConversionStats } from "@/lib/types";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { assembleDocument, computeStats } from "@/lib/post-process";
 
 type Phase = "idle" | "uploading" | "processing" | "done" | "error";
 
@@ -23,7 +24,7 @@ export default function Home() {
 
   const handleFile = async (file: File) => {
     // Reset state
-    setPhase("uploading");
+    setPhase("processing");
     setFileName(file.name);
     setTotalPages(0);
     setCompletedPages(0);
@@ -40,83 +41,97 @@ export default function Home() {
     abortControllerRef.current = controller;
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const startTime = Date.now();
 
-      const response = await fetch("/api/convert", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
+      // 1. Extract pages on the client
+      // Dynamic import to avoid SSR issues with pdfjs-dist
+      const { extractPDFPagesFromClient } = await import("@/lib/pdf-client");
+      const { metadata, chunks } = await extractPDFPagesFromClient(file, 1.5, (completed: number, total: number) => {
+        // Optionally show progress of local rendering here
+        setTotalPages(total);
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      if (metadata.totalPages > 200) {
+        throw new Error("PDF exceeds 200 pages limit");
       }
 
-      setPhase("processing");
+      setTotalPages(metadata.totalPages);
 
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamError: string | null = null;
+      // 2. Setup concurrency queue
+      const concurrency = 4;
+      const results: ConvertedPage[] = new Array(chunks.length);
+      let index = 0;
+      let completedCount = 0;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      async function worker() {
+        while (index < chunks.length) {
+          if (controller.signal.aborted) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? ""; // Keep last partial line
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
+          const i = index++;
+          const chunk = chunks[i];
+          const previousPageTail = i > 0
+            ? results[i - 1]?.markdown?.split("\n").filter(Boolean).slice(-3).join("\n")
+            : undefined;
 
           try {
-            const event: StreamEvent = JSON.parse(raw);
+            const response = await fetch("/api/convert-page", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chunk, previousPageTail }),
+              signal: controller.signal,
+            });
 
-            switch (event.type) {
-              case "start":
-                setTotalPages(event.totalPages);
-                break;
-              case "page_done":
-                setPages((prev) => [...prev, event.page]);
-                break;
-              case "progress":
-                setCompletedPages(event.completed);
-                break;
-              case "done":
-                setMarkdown(event.markdown);
-                setStats(event.stats);
-                setPhase("done");
-                break;
-              case "error":
-                streamError = event.message;
-                break;
+            if (!response.ok) {
+              throw new Error(`Failed to convert page ${chunk.pageNumber}`);
             }
-          } catch (e) {
-            streamError = e instanceof Error ? e.message : "Error parsing server event";
+
+            const data = await response.json();
+            results[i] = data.page;
+
+            // Update state
+            setPages((prev) => [...prev, data.page]);
+            completedCount++;
+            setCompletedPages(completedCount);
+
+          } catch (err: unknown) {
+            if (err instanceof Error && err.name === "AbortError") return;
+            console.error(err);
+            // Fallback for failed page
+            results[i] = {
+              pageNumber: chunk.pageNumber,
+              markdown: "<!-- conversion error -->",
+              hasTables: false,
+              hasMath: false,
+              hasCode: false,
+              confidence: 0,
+              modelUsed: "gemini-2.0-flash",
+            };
+            completedCount++;
+            setCompletedPages(completedCount);
           }
-
-          if (streamError) break;
         }
-
-        if (streamError) break;
       }
 
-      if (streamError) {
-        await reader.cancel();
-        setError(streamError);
-        setPhase("error");
-      }
+      // Run workers
+      await Promise.all(Array.from({ length: concurrency }, worker));
+
+      if (controller.signal.aborted) return;
+
+      // 3. Assemble and calculate stats locally
+      const validResults = results.filter(Boolean);
+      const finalMarkdown = assembleDocument(validResults);
+      const finalStats = computeStats(validResults, startTime);
+
+      setMarkdown(finalMarkdown);
+      setStats(finalStats);
+      setPhase("done");
+
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         console.log("Request aborted");
         return;
       }
-      console.error("Upload error:", err);
+      console.error("Conversion error:", err);
       setError(err instanceof Error ? err.message : "Unknown error occurred");
       setPhase("error");
     } finally {

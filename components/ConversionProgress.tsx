@@ -17,17 +17,22 @@ export default function ConversionProgress({
   stats,
 }: ConversionProgressProps) {
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-  
+
   // Calculate running stats if final stats not available
   const avgConfidence = pages.length > 0
     ? pages.reduce((sum, p) => sum + p.confidence, 0) / pages.length
     : 0;
   const retriedCount = stats ? stats.retriedPages : pages.filter(p => p.retried).length;
-  const tokenCount = stats 
-    ? stats.totalTokens 
+  const tokenCount = stats
+    ? stats.totalTokens
     : pages.reduce((sum, p) => sum + (p.tokensUsed || 0), 0);
-  
+
   const duration = stats ? (stats.durationMs / 1000).toFixed(1) + "s" : "--";
+
+  const runningServerDuration = pages.reduce((sum, p) => sum + (p.serverDurationMs || 0), 0);
+  const serverDuration = stats?.totalServerDurationMs
+    ? (stats.totalServerDurationMs / 1000).toFixed(1) + "s"
+    : (runningServerDuration > 0 ? (runningServerDuration / 1000).toFixed(1) + "s" : "--");
 
   const getModelColor = (modelId: string) => {
     switch (modelId) {
@@ -44,17 +49,17 @@ export default function ConversionProgress({
         <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{fileName}</span>
         <span style={{ color: "var(--text-secondary)" }}>{completed} / {total} pages</span>
       </div>
-      
+
       <div className="progress-track">
-        <div 
-          className="progress-fill" 
+        <div
+          className="progress-fill"
           style={{ width: `${percentage}%` }}
         />
       </div>
-      
-      <div style={{ 
-        display: "grid", 
-        gridTemplateColumns: "repeat(4, 1fr)", 
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(5, 1fr)",
         gap: "1rem",
         marginTop: "1rem",
         fontSize: "0.875rem",
@@ -73,51 +78,55 @@ export default function ConversionProgress({
           <div style={{ color: "var(--text-primary)" }}>{retriedCount}</div>
         </div>
         <div>
-          <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Time</div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Duration</div>
           <div style={{ color: "var(--text-primary)" }}>{duration}</div>
         </div>
+        <div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Vercel Time</div>
+          <div style={{ color: "var(--text-primary)" }}>{serverDuration}</div>
+        </div>
       </div>
-      
+
       {total <= 60 && (
         <div className="page-dots" style={{ marginTop: "1.5rem" }}>
           {Array.from({ length: total }).map((_, i) => {
             const page = pages.find(p => p.pageNumber === i + 1);
-            
+
             let backgroundColor = "var(--surface-3)";
             let opacity = 1;
-            
+
             if (page) {
-                backgroundColor = getModelColor(page.modelUsed);
-                opacity = 0.4 + page.confidence * 0.6;
+              backgroundColor = getModelColor(page.modelUsed);
+              opacity = 0.4 + page.confidence * 0.6;
             }
-            
+
             return (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 className="page-dot"
-                style={{ 
-                    backgroundColor, 
-                    opacity,
-                    transition: "all 0.3s ease"
+                style={{
+                  backgroundColor,
+                  opacity,
+                  transition: "all 0.3s ease"
                 }}
-                title={page ? `Page ${i+1}: ${page.modelUsed} (${(page.confidence * 100).toFixed(0)}%)` : `Page ${i+1}`}
+                title={page ? `Page ${i + 1}: ${page.modelUsed} (${(page.confidence * 100).toFixed(0)}%)` : `Page ${i + 1}`}
               />
             );
           })}
         </div>
       )}
-      
+
       {stats && (
-          <div style={{ display: "flex", gap: "1rem", marginTop: "1rem", fontSize: "0.75rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-blue)" }}></div>
-                  <span style={{ color: "var(--text-muted)" }}>Gemini 2.5 Pro</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-amber)" }}></div>
-                  <span style={{ color: "var(--text-muted)" }}>Qwen VL Max</span>
-              </div>
+        <div style={{ display: "flex", gap: "1rem", marginTop: "1rem", fontSize: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-blue)" }}></div>
+            <span style={{ color: "var(--text-muted)" }}>Gemini 2.5 Pro</span>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-amber)" }}></div>
+            <span style={{ color: "var(--text-muted)" }}>Qwen VL Max</span>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -4,12 +4,12 @@ export type ModelId =
   | "gemini-2.0-flash"
   | "qwen-vl-max";
 
-// Single page input: base64 data rendered as PNG
+// Single page input: base64 data rendered as image
 export interface PageChunk {
   pageNumber: number;      // 1-indexed
   totalPages: number;
-  base64Data: string;      // base64 encoded PNG, without data URI prefix
-  mimeType: "image/png";
+  base64Data: string;      // base64 encoded image, without data URI prefix
+  mimeType: "image/png" | "image/jpeg";
   isCJK?: boolean;         // true = Route to Qwen VL
 }
 
@@ -24,6 +24,7 @@ export interface ConvertedPage {
   modelUsed: ModelId;
   tokensUsed?: number;
   retried?: boolean;
+  serverDurationMs?: number; // Backend processing time for this page
 }
 
 // Final statistics
@@ -33,6 +34,7 @@ export interface ConversionStats {
   modelsUsed: Record<ModelId, number>;
   retriedPages: number;
   durationMs: number;
+  totalServerDurationMs?: number; // Sum of server processing times
 }
 
 // SSE event union type
