@@ -1,6 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { ProxyAgent, setGlobalDispatcher } from "undici";
@@ -99,9 +99,9 @@ async function convertPage(
   const { modelId, model } = selectModel(chunk, options.forceModel);
   const prompt = buildUserPrompt(chunk.pageNumber, chunk.totalPages, options.previousPageTail);
 
-  const result = await generateObject({
+  const result = await generateText({
     model,
-    schema: PageOutputSchema,
+    output: Output.object({ schema: PageOutputSchema }),
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -116,7 +116,7 @@ async function convertPage(
     temperature: 0.1,
   });
 
-  const output = result.object;
+  const output = result.output;
 
   let normalizedConfidence = output.confidence;
   if (normalizedConfidence > 1) {
@@ -199,9 +199,9 @@ export async function convertPageWithRetry(
     const prompt = buildRetryPrompt(chunk.pageNumber, issues.join("; "));
 
     try {
-      const retryResult = await generateObject({
+      const retryResult = await generateText({
         model,
-        schema: PageOutputSchema,
+        output: Output.object({ schema: PageOutputSchema }),
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -216,7 +216,7 @@ export async function convertPageWithRetry(
         temperature: 0.1,
       });
 
-      const output = retryResult.object;
+      const output = retryResult.output;
 
       let normalizedConfidence = output.confidence;
       if (normalizedConfidence > 1) {
