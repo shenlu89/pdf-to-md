@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "app/api/convert/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
+  "regions": ["iad1"]
+}
