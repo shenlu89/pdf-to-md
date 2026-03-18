@@ -250,47 +250,4 @@ export async function convertPageWithRetry(
   return result;
 }
 
-export async function convertPagesConcurrently(
-  chunks: PageChunk[],
-  options: {
-    concurrency?: number;
-    onPageDone?: (page: ConvertedPage) => void;
-  } = {}
-): Promise<ConvertedPage[]> {
-  const concurrency = options.concurrency || 4;
-  const results: ConvertedPage[] = new Array(chunks.length);
-  let index = 0;
 
-  async function worker() {
-    while (index < chunks.length) {
-      const i = index++;
-      if (i >= chunks.length) break;
-
-      const chunk = chunks[i];
-      const previousPageTail = i > 0
-        ? results[i - 1]?.markdown?.split("\n").filter(Boolean).slice(-3).join("\n")
-        : undefined;
-
-      try {
-        results[i] = await convertPageWithRetry(chunk, { previousPageTail });
-      } catch (e) {
-        console.error(`Error converting page ${chunk.pageNumber}`, e);
-        results[i] = {
-          pageNumber: chunk.pageNumber,
-          markdown: "<!-- conversion error -->",
-          hasTables: false,
-          hasMath: false,
-          hasCode: false,
-          confidence: 0,
-          modelUsed: "gemini-2.5-pro",
-          retried: false
-        };
-      }
-
-      options.onPageDone?.(results[i]);
-    }
-  }
-
-  await Promise.all(Array.from({ length: concurrency }, worker));
-  return results;
-}

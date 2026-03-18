@@ -34,6 +34,15 @@ export default function ConversionProgress({
     ? (stats.totalServerDurationMs / 1000).toFixed(1) + "s"
     : (runningServerDuration > 0 ? (runningServerDuration / 1000).toFixed(1) + "s" : "--");
 
+  const runningCost = pages.reduce((sum, p) => sum + (p.estimatedCost || 0), 0);
+  const totalCost = stats?.totalEstimatedCost
+    ? stats.totalEstimatedCost
+    : runningCost;
+
+  const formattedCost = totalCost > 0
+    ? (totalCost < 0.0001 ? "<$0.0001" : `$${totalCost.toFixed(4)}`)
+    : "--";
+
   const getModelColor = (modelId: string) => {
     switch (modelId) {
       case "gemini-2.5-pro": return "var(--accent-blue)";
@@ -59,8 +68,9 @@ export default function ConversionProgress({
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)",
+        gridTemplateColumns: "repeat(3, 1fr)",
         gap: "1rem",
+        rowGap: "0.75rem",
         marginTop: "1rem",
         fontSize: "0.875rem",
         color: "var(--text-secondary)"
@@ -84,6 +94,10 @@ export default function ConversionProgress({
         <div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Vercel Time</div>
           <div style={{ color: "var(--text-primary)" }}>{serverDuration}</div>
+        </div>
+        <div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Cost (Est.)</div>
+          <div style={{ color: "var(--text-primary)" }}>{formattedCost}</div>
         </div>
       </div>
 
